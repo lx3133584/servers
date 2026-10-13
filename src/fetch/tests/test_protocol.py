@@ -512,6 +512,46 @@ async def test_non_html_is_returned_raw_with_prefix(web: FakeWeb) -> None:
     )
 
 
+async def test_missing_content_type_non_html_is_returned_raw(web: FakeWeb) -> None:
+    body = '{"key": "value"}'
+    web.add(
+        PAGE,
+        httpx.Response(200, content=body.encode(), headers={}),
+    )
+    async with connect(ignore_robots_txt=True) as (session, _):
+        result = await call(session, {"url": PAGE})
+    assert text_of(result) == (
+        "Content type  cannot be simplified to markdown, but here is the raw content:\n"
+        f"Contents of {PAGE}:\n{body}"
+    )
+
+
+async def test_missing_content_type_html_is_simplified(web: FakeWeb) -> None:
+    web.add(
+        PAGE,
+        httpx.Response(200, content=ARTICLE_HTML.encode(), headers={}),
+    )
+    async with connect(ignore_robots_txt=True) as (session, _):
+        result = await call(session, {"url": PAGE})
+    assert "test paragraph" in text_of(result)
+
+
+async def test_missing_content_type_doctype_html_is_simplified(web: FakeWeb) -> None:
+    doctype_html = (
+        "<!DOCTYPE html><html><head><title>Test Page</title></head><body>"
+        "<article><h1>Hello HTML5</h1>"
+        "<p>This is a test paragraph with enough words to count as content.</p>"
+        "</article></body></html>"
+    )
+    web.add(
+        PAGE,
+        httpx.Response(200, content=doctype_html.encode(), headers={}),
+    )
+    async with connect(ignore_robots_txt=True) as (session, _):
+        result = await call(session, {"url": PAGE})
+    assert "test paragraph" in text_of(result)
+
+
 @pytest.mark.parametrize("status", [400, 404, 500, 503])
 async def test_http_error_status(web: FakeWeb, status: int) -> None:
     web.add(PAGE, plain("nope", status=status))
